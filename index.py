@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 app = FastAPI()
 
 from dotenv import load_dotenv
@@ -9,12 +9,16 @@ import json
 from helpers.mongo_connect import mongo_create_one, mongo_find_one
 from helpers.password_utils import verify_password
 
-from helpers.agent import chat
+from helpers.agent import chat, pdf_upload
 from pydantic import BaseModel
 from helpers.middleware import JWTMiddleware
 from helpers.jwt_utils import create_token
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+import tempfile
+import os
+
 
 class Message(BaseModel):
     message: list[dict[str, str]]
@@ -72,5 +76,21 @@ def chat_handler(message: Message):
     return {"message": "response recieved", "success": True, "data": msg}
 
 @app.post("/doc")
-def doc_handler():
+async def doc_handler(file: UploadFile):
+    if file.filename == "":
+        raise HTTPException(status_code=400, detail="No file uploaded")
+    
+    suffix = os.path.splitext(file.filename)[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    
+    pdf_upload(tmp_path)
+    os.remove(tmp_path)
+    return {"message": "File uploaded successfully", "success": True}
+
+@app.post("/search")
+async def search_handler(message: Message):
+    if message.message == "":
+        raise HTTPException(status_code=400, detail="No message")
     
